@@ -17,14 +17,12 @@
             font-family: -apple-system, system-ui, sans-serif; 
             background: var(--ios-grey); 
             margin: 0; 
-            /* Gère l'encoche (notch) des iPhones récents */
             padding-top: env(safe-area-inset-top);
             -webkit-tap-highlight-color: transparent;
         }
         .header { 
             padding: 20px; 
             background: rgba(255,255,255,0.8); 
-            /* Effet de flou translucide typique d'iOS */
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border-bottom: 1px solid #d1d1d6; 
@@ -42,7 +40,6 @@
             font-size: 17px; 
             box-sizing: border-box;
         }
-        /* Style des cartes de contact */
         .contact-card { 
             background: white; 
             margin: 10px; 
@@ -73,11 +70,10 @@
 
 <div class="header">
     <h1>Annuaire</h1>
-    <input type="text" id="search" placeholder="Rechercher nom, poste ou service..." onkeyup="filter()">
+    <input type="text" id="search" placeholder="Rechercher nom, poste, service ou bât..." onkeyup="filter()">
 </div>
 
-<div id="contactList">
-    </div>
+<div id="contactList"></div>
 
 <script>
     // --- 1. BASE DE DONNÉES (Éditez vos contacts ici) ---
@@ -87,10 +83,8 @@
     ];
 
     let db;
-    // Ouverture de la base de données locale IndexedDB
     const request = indexedDB.open("AnnuaireDB", 1);
 
-    // Initialisation de la structure de la base au premier chargement
     request.onupgradeneeded = (e) => {
         db = e.target.result;
         if (!db.objectStoreNames.contains("contacts")) {
@@ -98,37 +92,38 @@
         }
     };
 
-    // Une fois la base prête, on synchronise les données
     request.onsuccess = (e) => {
         db = e.target.result;
         const transaction = db.transaction("contacts", "readwrite");
         const store = transaction.objectStore("contacts");
         
-        // On vide l'ancien stockage et on remet les données fraîches de la variable DATA
         store.clear(); 
         DATA.forEach(item => store.add(item));
         
-        transaction.oncomplete = () => render(); // Affiche la liste une fois fini
+        transaction.oncomplete = () => render();
     };
 
-    // Fonction pour générer le HTML de la liste
+    // --- 2. FONCTION DE RENDU AVEC RECHERCHE PAR BÂTIMENT ---
     function render(filterText = "") {
         const list = document.getElementById('contactList');
         const transaction = db.transaction("contacts", "readonly");
         const store = transaction.objectStore("contacts");
-        const request = store.getAll(); // On récupère tous les contacts stockés
+        const request = store.getAll();
 
         request.onsuccess = () => {
             const contacts = request.result;
-            list.innerHTML = ""; // On nettoie la liste actuelle
+            list.innerHTML = ""; 
             
-            // On filtre selon la saisie de l'utilisateur
-            contacts.filter(c => 
+            // Filtrage multi-critères : Nom, Service, Poste ET Bâtiment
+            const filtered = contacts.filter(c => 
                 c.nom.toLowerCase().includes(filterText) || 
                 c.service.toLowerCase().includes(filterText) ||
-                c.poste.includes(filterText)
-            ).forEach(c => {
-                // Injection du code HTML pour chaque contact
+                c.poste.includes(filterText) ||
+                c.batiment.toLowerCase().includes(filterText) // Recherche par bâtiment ajoutée
+            );
+
+            // Boucle pour générer les cartes HTML
+            filtered.forEach(c => {
                 list.innerHTML += `
                     <div class="contact-card">
                         <div class="name">${c.nom}</div>
@@ -140,15 +135,19 @@
                         <a href="tel:${c.tel}" class="tel-link">📞 Appeler : ${c.tel}</a>
                     </div>`;
             });
+
+            // Affichage d'un message si aucun résultat n'est trouvé
+            if (filtered.length === 0) {
+                list.innerHTML = '<p style="text-align:center; color: #8e8e93; margin-top: 20px;">Aucun résultat</p>';
+            }
         };
     }
 
-    // Déclenche la recherche à chaque touche relâchée dans l'input
+    // Déclenche la mise à jour de la liste selon la saisie
     function filter() {
         render(document.getElementById('search').value.toLowerCase());
     }
 
-    // Enregistrement du Service Worker (pour le mode hors ligne)
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./sw.js');
     }
