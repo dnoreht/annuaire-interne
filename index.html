@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Annuaire">
+    
+    <title>Annuaire Interne</title>
+    <link rel="manifest" href="manifest.json">
+    
+    <style>
+        :root { --ios-blue: #007AFF; --ios-grey: #f2f2f7; }
+        body { 
+            font-family: -apple-system, system-ui, sans-serif; 
+            background: var(--ios-grey); 
+            margin: 0; 
+            /* Gère l'encoche (notch) des iPhones récents */
+            padding-top: env(safe-area-inset-top);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .header { 
+            padding: 20px; 
+            background: rgba(255,255,255,0.8); 
+            /* Effet de flou translucide typique d'iOS */
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid #d1d1d6; 
+            position: sticky; 
+            top: 0; 
+            z-index: 100;
+        }
+        h1 { font-size: 28px; margin: 0 0 15px 0; letter-spacing: -0.5px; }
+        #search { 
+            width: 100%; 
+            padding: 12px; 
+            border-radius: 12px; 
+            border: none; 
+            background: #e3e3e8; 
+            font-size: 17px; 
+            box-sizing: border-box;
+        }
+        /* Style des cartes de contact */
+        .contact-card { 
+            background: white; 
+            margin: 10px; 
+            padding: 16px; 
+            border-radius: 14px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
+        }
+        .name { font-weight: 700; font-size: 19px; color: #1c1c1e; text-transform: uppercase; }
+        .tag { 
+            background: #e8e8ed; 
+            padding: 3px 10px; 
+            border-radius: 6px; 
+            font-size: 12px; 
+            font-weight: 600;
+            margin-right: 8px; 
+            color: #8e8e93;
+        }
+        .tel-link { 
+            display: inline-block;
+            margin-top: 10px;
+            color: var(--ios-blue); 
+            text-decoration: none; 
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Annuaire</h1>
+    <input type="text" id="search" placeholder="Rechercher nom, poste ou service..." onkeyup="filter()">
+</div>
+
+<div id="contactList">
+    </div>
+
+<script>
+    // --- 1. BASE DE DONNÉES (Éditez vos contacts ici) ---
+    const DATA = [
+        { nom: "DUPONT JEAN", poste: "402", batiment: "A", service: "IT", tel: "0123456789" },
+        { nom: "MARTIN ALICE", poste: "105", batiment: "B", service: "RH", tel: "0123456780" }
+    ];
+
+    let db;
+    // Ouverture de la base de données locale IndexedDB
+    const request = indexedDB.open("AnnuaireDB", 1);
+
+    // Initialisation de la structure de la base au premier chargement
+    request.onupgradeneeded = (e) => {
+        db = e.target.result;
+        if (!db.objectStoreNames.contains("contacts")) {
+            db.createObjectStore("contacts", { keyPath: "id", autoIncrement: true });
+        }
+    };
+
+    // Une fois la base prête, on synchronise les données
+    request.onsuccess = (e) => {
+        db = e.target.result;
+        const transaction = db.transaction("contacts", "readwrite");
+        const store = transaction.objectStore("contacts");
+        
+        // On vide l'ancien stockage et on remet les données fraîches de la variable DATA
+        store.clear(); 
+        DATA.forEach(item => store.add(item));
+        
+        transaction.oncomplete = () => render(); // Affiche la liste une fois fini
+    };
+
+    // Fonction pour générer le HTML de la liste
+    function render(filterText = "") {
+        const list = document.getElementById('contactList');
+        const transaction = db.transaction("contacts", "readonly");
+        const store = transaction.objectStore("contacts");
+        const request = store.getAll(); // On récupère tous les contacts stockés
+
+        request.onsuccess = () => {
+            const contacts = request.result;
+            list.innerHTML = ""; // On nettoie la liste actuelle
+            
+            // On filtre selon la saisie de l'utilisateur
+            contacts.filter(c => 
+                c.nom.toLowerCase().includes(filterText) || 
+                c.service.toLowerCase().includes(filterText) ||
+                c.poste.includes(filterText)
+            ).forEach(c => {
+                // Injection du code HTML pour chaque contact
+                list.innerHTML += `
+                    <div class="contact-card">
+                        <div class="name">${c.nom}</div>
+                        <div class="info"><strong>Poste :</strong>&nbsp;${c.poste}</div>
+                        <div class="info">
+                            <span class="tag">Bât. ${c.batiment}</span> 
+                            <span class="tag">${c.service}</span>
+                        </div>
+                        <a href="tel:${c.tel}" class="tel-link">📞 Appeler : ${c.tel}</a>
+                    </div>`;
+            });
+        };
+    }
+
+    // Déclenche la recherche à chaque touche relâchée dans l'input
+    function filter() {
+        render(document.getElementById('search').value.toLowerCase());
+    }
+
+    // Enregistrement du Service Worker (pour le mode hors ligne)
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js');
+    }
+</script>
+</body>
+</html>
